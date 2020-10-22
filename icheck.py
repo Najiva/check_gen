@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 
 import psycopg2
+import json
+import sys
+import os.path
 
 # Example definition
 # Lets say the states transiton is as follows:
@@ -8,27 +11,35 @@ import psycopg2
 #    not_paid -> paid
 # And we have to be make sure that not_paid orders have telehone contact number stored in the database in the column order.telephone and paid orders have an invoice generated.
 
-data = {
-    'database': {
-        'name': "",
-        'user': "",
-        'password': "",
-        'host': "",
-        'port': "",
-    },
-    'table': 'order',
-    'state_column': 'state',
-    'allowed_states': [
-        {
-            'value': 'paid', 
-            'not_null_columns': ['invoice_number']
-        },
-        {
-            'value': 'not_paid', 
-            'not_null_columns': ['telephone']
-        },
-    ]
-}
+# data = {
+    # 'database': {
+        # 'name': "",
+        # 'user': "",
+        # 'password': "",
+        # 'host': "",
+        # 'port': "",
+    # },
+    # 'table': 'order',
+    # 'state_column': 'state',
+    # 'allowed_states': [
+        # {
+            # 'value': 'paid', 
+            # 'not_null_columns': ['invoice_number']
+        # },
+        # {
+            # 'value': 'not_paid', 
+            # 'not_null_columns': ['telephone']
+        # },
+    # ]
+# }
+
+# Read json
+def read_data(file_path):
+    with open(file_path, 'r') as f:
+        data = f.read()
+        y = json.loads(data)
+        return y
+
 
 # Validating that columns exist
 def validate_structure():
@@ -59,8 +70,14 @@ def drop_constraint(table_name, check_name, cursor, connection):
     cursor.execute('ALTER TABLE {} DROP CONSTRAINT IF EXISTS {};'.format(table_name, check_name))
     connection.commit()
 
-def main():
-    try:
+def main(argv):
+    file_path = argv[1]
+    # Check that file exists
+    if not os.path.isfile(file_path):
+        print('File ' + file_path + ' does not exist.')
+        return
+    data = read_data(file_path)
+    try:   
         connection = psycopg2.connect(user = data['database']['user'],
                                     password = data['database']['password'],
                                     host = data['database']['host'],
@@ -81,7 +98,7 @@ def main():
             columns = state['not_null_columns']
             check_name = '{}_{}_{}_icheck'.format(data['table'], data['state_column'], str(value))
             required_columns = ' or '.join(map(lambda x: str(x) + ' is null ', columns))
-            sql = 'ALTER TABLE {} ADD CONSTRAINT {} CHECK ( CASE WHEN {} = {} AND ({}) THEN false ELSE true END);'.format(data['table'], check_name, data['state_column'], value, required_columns)
+            sql = 'ALTER TABLE {} ADD CONSTRAINT {} CHECK (CASE WHEN {} = {} AND ({}) THEN false ELSE true END);'.format(data['table'], check_name, data['state_column'], value, required_columns)
             print(sql)
             drop_constraint(data['table'], check_name, cursor, connection)
             apply_constraint(sql, check_name, cursor, connection)
@@ -96,4 +113,4 @@ def main():
             print("PostgreSQL connection is closed")
 
 if __name__ == "__main__":
-   main()
+   main(sys.argv)
